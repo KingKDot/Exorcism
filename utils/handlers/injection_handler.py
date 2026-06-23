@@ -3,7 +3,7 @@ import ctypes.wintypes
 import os
 import subprocess
 import time
-from typing import Optional, Tuple
+from typing import Mapping, Optional, Tuple
 
 
 PROCESS_ALL_ACCESS = 0x1F0FFF
@@ -109,7 +109,9 @@ def get_process_id_by_name(process_name: str) -> Optional[int]:
     return None
 
 
-def launch_cmd_and_get_pid() -> Tuple[Optional[subprocess.Popen], Optional[int]]:
+def launch_cmd_and_get_pid(
+    env: Optional[Mapping[str, str]] = None,
+) -> Tuple[Optional[subprocess.Popen], Optional[int]]:
     """
     Launch a new cmd.exe process and return the process object and PID.
 
@@ -118,7 +120,7 @@ def launch_cmd_and_get_pid() -> Tuple[Optional[subprocess.Popen], Optional[int]]
     """
     try:
         process = subprocess.Popen(
-            ["cmd.exe"], creationflags=subprocess.CREATE_NEW_CONSOLE
+            ["cmd.exe"], creationflags=subprocess.CREATE_NEW_CONSOLE, env=env
         )
 
         time.sleep(2)

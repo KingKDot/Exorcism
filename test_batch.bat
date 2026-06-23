@@ -1,4 +1,7 @@
 @echo off
+
+echo poop & echo butt
+
 echo Starting test batch file...
 echo Current directory: %CD%
 echo Current time: %TIME%

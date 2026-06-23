@@ -2,6 +2,9 @@
 __pycache__/
 *.py[codz]
 *$py.class
+cmd_hook.json
+.symbols/
+.exorcism_debug/
 
 # C extensions
 *.so

@@ -2,18 +2,16 @@
 
 "When there are little demons running around with .bat crypters, you get an exorcism."
 
-If you haven't installed detours, make sure you run "nmake" in the detours src directory.
-
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgreen.svg)
-![Language](https://img.shields.io/badge/language-C%2B%2B%2FPython-orange.svg)
+![Language](https://img.shields.io/badge/language-Rust%2FPython-orange.svg)
 
-**Exorcism** is the first open-source runtime Windows batch deobfuscator that uses DLL injection and function hooking to monitor and log batch file commands as they are executed by `cmd.exe`.
+**Exorcism** is a runtime Windows batch deobfuscator/debugger that uses DLL injection and function hooking to pause, edit, skip, and log batch commands as they are processed by `cmd.exe`.
 
 > [!WARNING]
-> **🚨 THE BATCH FILE STILL GETS EXECUTED! 🚨**
+> **🚨 DEBUGGING IS NOT A SANDBOX! 🚨**
 > 
-> This tool **DOES NOT** prevent malicious batch files from executing. It only logs the commands as they run. **DO NOT** use this tool on untrusted or malicious batch files unless you are in a completely isolated environment (sandboxed VM, air-gapped system, etc.).
+> This tool can pause and skip commands at its current hook point, but the target `cmd.exe` and any analyzed batch file still run on your system. **DO NOT** use this tool on untrusted or malicious batch files unless you are in a completely isolated environment (sandboxed VM, air-gapped system, etc.).
 > 
 > **Use at your own risk. This tool is intended for security research, malware analysis, and educational purposes only.**
 
@@ -23,8 +21,9 @@ Exorcism hooks into the Windows Command Processor (`cmd.exe`) at runtime to inte
 
 ### Key Features
 
-- **Runtime Analysis**: Captures commands as they are actually executed, bypassing most obfuscation techniques
-- **DLL Injection**: Uses Microsoft Detours library for reliable function hooking
+- **Runtime Analysis**: Captures commands as they are actually processed, bypassing most obfuscation techniques
+- **Interactive Debugging**: Pause before execution, continue, skip, edit, or auto-handle repeated commands
+- **DLL Injection**: Uses the Rust `detour` crate for reliable function hooking
 - **Real-time Monitoring**: Live command logging with JSON output format
 - **Safe Memory Access**: Robust pointer validation and memory safety checks
 - **Cross-Architecture**: Supports both x86 and x64 processes
@@ -33,21 +32,22 @@ Exorcism hooks into the Windows Command Processor (`cmd.exe`) at runtime to inte
 
 The tool consists of two main components:
 
-1. **Hook DLL (`cmdtest.dll`)**: A C++ DLL that hooks the `FindFixAndRun` function in `cmd.exe`
+1. **Hook DLL (`cmdtest.dll`)**: A Rust DLL that hooks the `FindFixAndRun` function in `cmd.exe`
 2. **Python Controller (`main.py`)**: A Python script that handles DLL injection and log monitoring
 
 ### How It Works
 
 1. The Python controller launches a new `cmd.exe` process
 2. The hook DLL is injected into the `cmd.exe` process using DLL injection
-3. The DLL hooks the internal `FindFixAndRun` function using Microsoft Detours
-4. Every command executed by the batch file is logged to `cmd_hook.json` before execution
-5. The Python monitor displays the logged commands in real-time
+3. The DLL hooks the internal `FindFixAndRun` function using the Rust `detour` crate
+4. Every command reaches a Python-controlled breakpoint before execution
+5. The Python monitor lets you continue, skip, edit, or auto-handle repeated commands
+6. Decisions and command activity are logged to `cmd_hook.json`
 
 ## 📋 Prerequisites
 
 - Windows 10/11 (x64)
-- Visual Studio 2019/2022 with C++ development tools
+- Rust stable toolchain
 - Python 3.7 or higher
 - Administrator privileges (required for DLL injection)
 
@@ -62,10 +62,11 @@ cd Exorcism
 
 ### 2. Build the Hook DLL
 
-1. Open `cmdtest/cmdtest.sln` in Visual Studio
-2. Select **Release** configuration and **x64** platform
-3. Build the solution (Ctrl+Shift+B)
-4. The compiled DLL will be located at `x64/Release/cmdtest.dll`
+1. Build and stage the Rust hook DLL:
+   ```cmd
+   build_cmdtest.bat
+   ```
+2. The staged DLL will be located at `bin\cmdtest.dll`, which `main.py` uses as its default hook DLL path.
 
 ### 3. Install Python Dependencies
 
@@ -85,12 +86,18 @@ pip install -r requirements.txt
 
 2. **Enter the DLL path** when prompted:
    ```
-   Enter the full path to the hook DLL: C:\path\to\Exorcism\x64\Release\cmdtest.dll
+   Enter the full path to the hook DLL [C:\path\to\Exorcism\bin\cmdtest.dll]:
    ```
 
 3. **Execute your batch file** in the monitored cmd.exe window that appears
 
-4. **Monitor the output** in real-time as commands are logged
+4. **Choose a debugger action** when each command breaks:
+   - `c`: continue once
+   - `s`: skip once
+   - `e`: edit the command line before it runs
+   - `a`: always continue that exact command
+   - `k`: always skip that exact command
+   - `i`: continue now and silently continue future repeats
 
 
 ### Example Input
@@ -106,6 +113,8 @@ The tool logs commands in JSON format to `cmd_hook.json`:
 
 ```json
 {"event_type":"hook_status","message":"FindFixAndRun hook initialized successfully"}
+{"event_type":"debug_break","command":"echo","arguments":" Hello World","command_type":0,"message":"Paused before command execution","break_id":1}
+{"event_type":"debug_decision","command":"echo","arguments":" Hello World","message":"continue","break_id":1}
 {"arguments":" Hello World","command":"echo","command_type":0,"event_type":"command_execution"}
 {"arguments":" VAR=secret_value","command":"set","command_type":0,"event_type":"command_execution"}
 {"command":"cls","command_type":0,"event_type":"command_execution"}
@@ -116,24 +125,28 @@ The tool logs commands in JSON format to `cmd_hook.json`:
 
 ### Hook DLL Configuration
 
-The hook DLL uses a hardcoded RVA (Relative Virtual Address) to locate the `FindFixAndRun` function:
+`main.py` resolves the `FindFixAndRun` RVA from the matching `cmd.exe` public symbols before launching the monitored shell, then passes it to the hook DLL through `EXORCISM_FIND_FIX_AND_RUN_RVA`. The matching PDB is cached locally under `.symbols/`.
 
-```cpp
-ULONG_PTR rva = 0x116B0;  // RVA for FindFixAndRun function
+The hook DLL also keeps a fallback RVA:
+
+```rust
+const DEFAULT_FIND_FIX_AND_RUN_RVA: usize = 0x116B0;
 ```
 
 **Note**: This RVA is specific to certain versions of `cmd.exe`. If the hook fails, you may need to:
 
-1. Use a debugger (x64dbg, IDA Pro) to find the current RVA for `FindFixAndRun`
-2. Update the RVA value in `dllmain.cpp`
-3. Rebuild the DLL
+1. Check that symbol resolution logged a current `FindFixAndRun` RVA when `main.py` started.
+2. Use a debugger (x64dbg, IDA Pro) to find the current RVA for `FindFixAndRun` if symbols are unavailable.
+3. Set `EXORCISM_FIND_FIX_AND_RUN_RVA=0x...` before running `main.py`, or update the fallback in `cmdtest/src/lib.rs` and rebuild with `build_cmdtest.bat`.
 
 ### Python Monitor Configuration
 
 The Python script automatically:
 - Cleans up previous log files
+- Cleans up previous debugger response files in `.exorcism_debug/`
 - Launches `cmd.exe` with DLL injection
 - Monitors the JSON log file in real-time
+- Writes debugger decisions back to the hook DLL
 - Provides a rich terminal interface
 
 ## 🛡️ Security Considerations
@@ -168,8 +181,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ## 🙏 Acknowledgments
 
-- Microsoft Detours library for function hooking capabilities
-- nlohmann/json library for safe JSON handling
+- The Rust `detour` crate for function hooking capabilities
 - Windows XP source code leak for cmd.exe internal structure insights
 - The security research community for inspiration and guidance
 
