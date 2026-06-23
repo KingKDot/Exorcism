@@ -1,6 +1,7 @@
 use crate::cmd::{self, CmdNode};
-use crate::logging::{json_field, log_json_entry, log_json_entry_with_extra};
+use crate::logging::{log_json_entry, log_json_entry_with_extra};
 use crate::win::is_safe_pointer;
+use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread::sleep;
@@ -168,17 +169,17 @@ fn log_debug_decision(break_id: u64, action: &str, command: &str, arguments: &st
         (!arguments.is_empty()).then_some(arguments),
         None,
         Some(action),
-        &[format!("\"break_id\":{break_id}")],
+        &[("break_id", Value::from(break_id))],
     );
 }
 
-fn debug_extra_fields(break_id: u64, source: &str, rio_type: Option<i32>) -> Vec<String> {
+fn debug_extra_fields(break_id: u64, source: &str, rio_type: Option<i32>) -> Vec<(&str, Value)> {
     let mut fields = vec![
-        format!("\"break_id\":{break_id}"),
-        json_field("source", source),
+        ("break_id", Value::from(break_id)),
+        ("source", Value::String(source.to_string())),
     ];
     if let Some(rio_type) = rio_type {
-        fields.push(format!("\"rio_type\":{rio_type}"));
+        fields.push(("rio_type", Value::from(rio_type)));
     }
     fields
 }
@@ -232,7 +233,7 @@ fn wait_for_debug_decision(break_id: u64) -> DebugDecision {
         None,
         None,
         Some("Debugger did not respond before timeout; continuing command"),
-        &[format!("\"break_id\":{break_id}")],
+        &[("break_id", Value::from(break_id))],
     );
     DebugDecision::Continue
 }

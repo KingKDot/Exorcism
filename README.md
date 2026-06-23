@@ -112,13 +112,48 @@ cls
 The tool logs commands in JSON format to `cmd_hook.json`:
 
 ```json
-{"event_type":"hook_status","message":"FindFixAndRun hook initialized successfully"}
-{"event_type":"debug_break","command":"echo","arguments":" Hello World","command_type":0,"message":"Paused before command execution","break_id":1}
-{"event_type":"debug_decision","command":"echo","arguments":" Hello World","message":"continue","break_id":1}
-{"arguments":" Hello World","command":"echo","command_type":0,"event_type":"command_execution"}
-{"arguments":" VAR=secret_value","command":"set","command_type":0,"event_type":"command_execution"}
-{"command":"cls","command_type":0,"event_type":"command_execution"}
-{"event_type":"hook_status","message":"FindFixAndRun hook being removed"}
+[
+  {
+    "event_type": "hook_status",
+    "message": "FindFixAndRun hook initialized successfully"
+  },
+  {
+    "arguments": " Hello World",
+    "break_id": 1,
+    "command": "echo",
+    "command_type": 0,
+    "event_type": "debug_break",
+    "message": "Paused before command execution"
+  },
+  {
+    "arguments": " Hello World",
+    "break_id": 1,
+    "command": "echo",
+    "event_type": "debug_decision",
+    "message": "continue"
+  },
+  {
+    "arguments": " Hello World",
+    "command": "echo",
+    "command_type": 0,
+    "event_type": "command_execution"
+  },
+  {
+    "arguments": " VAR=secret_value",
+    "command": "set",
+    "command_type": 0,
+    "event_type": "command_execution"
+  },
+  {
+    "command": "cls",
+    "command_type": 0,
+    "event_type": "command_execution"
+  },
+  {
+    "event_type": "hook_status",
+    "message": "FindFixAndRun hook being removed"
+  }
+]
 ```
 
 ## 🔧 Configuration

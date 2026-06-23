@@ -76,6 +76,7 @@ class CmdLogMonitor:
         self.debugger_enabled = debugger_enabled
         self.target_process = target_process
         self.last_position = 0
+        self.last_json_entry_count = 0
         self.should_stop = False
         self.command_count = 0
         self.hook_status = "Unknown"
@@ -95,6 +96,14 @@ class CmdLogMonitor:
 
         try:
             with open(self.log_file_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+                if content.lstrip().startswith("["):
+                    entries = json.loads(content) if content.strip() else []
+                    new_entries = entries[self.last_json_entry_count :]
+                    self.last_json_entry_count = len(entries)
+                    self.last_position = f.tell()
+                    return new_entries
+
                 f.seek(self.last_position)
                 new_content = f.read()
                 # update position after reading
@@ -300,9 +309,9 @@ class CmdLogMonitor:
 
         self._write_debug_response(break_id, "continue")
 
-    def _format_and_print_entry(self, line: str):
+    def _format_and_print_entry(self, line):
         try:
-            entry = json.loads(line)
+            entry = line if isinstance(line, dict) else json.loads(line)
             timestamp = datetime.now().strftime("%H:%M:%S")
             event_type = entry.get("event_type", "unknown")
 
@@ -396,7 +405,16 @@ class CmdLogMonitor:
                     existing_content = f.read()
                     self.last_position = f.tell()
 
-                    if existing_content:
+                    if existing_content.lstrip().startswith("["):
+                        existing_entries = json.loads(existing_content)
+                        self.last_json_entry_count = len(existing_entries)
+                        if existing_entries:
+                            logging.info(
+                                f"Found {len(existing_entries)} existing entries:"
+                            )
+                            for entry in existing_entries:
+                                self._format_and_print_entry(entry)
+                    elif existing_content:
                         existing_lines = [
                             line.strip()
                             for line in existing_content.splitlines()
